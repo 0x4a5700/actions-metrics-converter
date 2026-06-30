@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -9,6 +10,8 @@ import (
 	"net/url"
 	"os"
 	"time"
+
+	github "github.com/0x4a5700/actions-metrics-converter/pkg/github"
 )
 
 const (
@@ -37,12 +40,47 @@ func handleAny(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	decoded, err := url.QueryUnescape(string(body))
+	if err != nil {
+		slog.Warn("error url-decoding body, treating as raw", slog.Any("error", err))
+		decoded = string(body)
+	}
+
+	var payload github.WorkflowJobPayload
+	if err := json.Unmarshal([]byte(decoded), &payload); err != nil {
+		filename, writeErr := writeRequestToFile(r, decoded)
+		if writeErr != nil {
+			slog.Error("error unmarshalling payload and failed to write to file", slog.Any("error", err), slog.Any("write_error", writeErr))
+		} else {
+			slog.Error("error unmarshalling payload", slog.Any("error", err), slog.String("file", filename))
+		}
+		http.Error(w, "invalid payload", http.StatusBadRequest)
+		return
+	}
+
+	if payload.WorkflowRun.Id != 0 {
+		workflowRun(payload)
+	} else {
+		workflowJob(payload)
+	}
+
+	slog.Info("request complete", slog.Any("url", r.URL.String()))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func workflowJob(payload github.WorkflowJobPayload) {
+	slog.Info("workflow job", slog.String("name", payload.WorkflowJob.Name), slog.String("status", payload.WorkflowJob.Status))
+}
+
+func workflowRun(payload github.WorkflowJobPayload) {
+	slog.Info("workflow run", slog.String("name", payload.WorkflowRun.Name), slog.String("status", payload.WorkflowRun.Status))
+}
+
+func writeRequestToFile(r *http.Request, body string) (string, error) {
 	filename := fmt.Sprintf("%d-%s.txt", time.Now().Unix(), randomString(5))
 	f, err := os.Create(filename)
 	if err != nil {
-		slog.Warn("error creating file", slog.Any("error", err))
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
+		return "", err
 	}
 	defer func() {
 		if err := f.Close(); err != nil {
@@ -57,17 +95,8 @@ func handleAny(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	_, _ = fmt.Fprintln(f)
-	decoded, err := url.QueryUnescape(string(body))
-	if err != nil {
-		slog.Warn("error url-decoding body, writing raw", slog.Any("error", err))
-		decoded = string(body)
-	}
-	_, err = fmt.Fprint(f, decoded)
-	if err != nil {
-		slog.Warn("error writing to file", slog.Any("error", err))
-	}
-	slog.Info("request complete", slog.Any("url", r.URL.String()))
-	w.WriteHeader(http.StatusNoContent)
+	_, err = fmt.Fprint(f, body)
+	return filename, err
 }
 
 func randomString(n int) string {
