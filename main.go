@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,6 +24,19 @@ const (
 )
 
 func main() {
+	ctx := context.Background()
+
+	shutdown, err := telemetry.InitProvider(ctx, "actions-metrics-converter")
+	if err != nil {
+		slog.Error("failed to initialise tracer provider", slog.Any("error", err))
+		os.Exit(1)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("error shutting down tracer provider", slog.Any("error", err))
+		}
+	}()
+
 	http.HandleFunc("/", handleAny)
 	slog.Info("starting server", slog.Int("port", port))
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil); err != nil {
