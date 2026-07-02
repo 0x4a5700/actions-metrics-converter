@@ -21,3 +21,18 @@ type JobSpans struct {
 	Status     string
 	Conclusion string
 }
+
+type RunSpans struct {
+	TraceID trace.TraceID
+	SpanID  trace.SpanID
+
+	Name string
+
+	QueueStart time.Time // CreatedAt: when the run was queued
+	QueueEnd   time.Time // RunStartedAt: when execution began
+	RunStart   time.Time // RunStartedAt
+	RunEnd     time.Time // UpdatedAt: when completed
+
+	Status     string
+	Conclusion string
+}

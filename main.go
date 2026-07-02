@@ -76,7 +76,7 @@ func handleAny(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if payload.WorkflowRun.Id != 0 {
-		workflowRun(payload)
+		workflowRun(r.Context(), payload)
 	} else {
 		spans := workflow.ProcessJob(payload)
 		telemetry.Emit(r.Context(), otel.Tracer("actions-metrics-converter"), spans)
@@ -86,8 +86,9 @@ func handleAny(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func workflowRun(payload github.WorkflowJobPayload) {
-	slog.Info("workflow run", slog.String("name", payload.WorkflowRun.Name), slog.String("status", payload.WorkflowRun.Status))
+func workflowRun(ctx context.Context, payload github.WorkflowJobPayload) {
+	spans := workflow.ProcessRun(payload)
+	telemetry.EmitRun(ctx, otel.Tracer("actions-metrics-converter"), spans)
 }
 
 func writeRequestToFile(r *http.Request, body string) (string, error) {
