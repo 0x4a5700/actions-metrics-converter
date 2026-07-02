@@ -11,7 +11,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/0x4a5700/actions-metrics-converter/internal/telemetry"
+	"github.com/0x4a5700/actions-metrics-converter/internal/workflow"
 	github "github.com/0x4a5700/actions-metrics-converter/pkg/github"
+	"go.opentelemetry.io/otel"
 )
 
 const (
@@ -61,15 +64,12 @@ func handleAny(w http.ResponseWriter, r *http.Request) {
 	if payload.WorkflowRun.Id != 0 {
 		workflowRun(payload)
 	} else {
-		workflowJob(payload)
+		spans := workflow.ProcessJob(payload)
+		telemetry.Emit(r.Context(), otel.Tracer("actions-metrics-converter"), spans)
 	}
 
 	slog.Info("request complete", slog.Any("url", r.URL.String()))
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func workflowJob(payload github.WorkflowJobPayload) {
-	slog.Info("workflow job", slog.String("name", payload.WorkflowJob.Name), slog.String("status", payload.WorkflowJob.Status))
 }
 
 func workflowRun(payload github.WorkflowJobPayload) {
