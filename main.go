@@ -52,7 +52,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := &http.Server{Addr: fmt.Sprintf(":%d", port)}
+	// GitHub gives webhook deliveries ~10s before marking them failed, so
+	// there is no value in letting requests linger much longer than that.
+	srv := &http.Server{
+		Addr:              fmt.Sprintf(":%d", port),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
 	http.HandleFunc("/", handleWebhook([]byte(secret)))
 
 	go func() {
