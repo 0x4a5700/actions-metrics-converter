@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/0x4a5700/actions-metrics-converter/internal/telemetry"
@@ -37,10 +39,26 @@ func main() {
 		}
 	}()
 
+	srv := &http.Server{Addr: fmt.Sprintf(":%d", port)}
 	http.HandleFunc("/", handleAny)
-	slog.Info("starting server", slog.Int("port", port))
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil); err != nil {
-		slog.Error("problem listening for connections", slog.Any("error", err))
+
+	go func() {
+		slog.Info("starting server", slog.Int("port", port))
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("problem listening for connections", slog.Any("error", err))
+			os.Exit(1)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	slog.Info("shutting down server")
+	shutdownCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("server shutdown error", slog.Any("error", err))
 	}
 }
 
