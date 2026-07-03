@@ -123,6 +123,13 @@ func verifySignature(secret, body []byte, header string) bool {
 }
 
 func handlePayload(w http.ResponseWriter, r *http.Request, body []byte) {
+	event := r.Header.Get("X-GitHub-Event")
+	if event != "workflow_job" && event != "workflow_run" {
+		slog.Info("ignoring event", slog.String("event", event))
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	decoded, err := url.QueryUnescape(string(body))
 	if err != nil {
 		slog.Warn("error url-decoding body, treating as raw", slog.Any("error", err))
@@ -147,7 +154,7 @@ func handlePayload(w http.ResponseWriter, r *http.Request, body []byte) {
 		return
 	}
 
-	if payload.WorkflowRun.Id != 0 {
+	if event == "workflow_run" {
 		workflowRun(r.Context(), payload)
 	} else {
 		spans := workflow.ProcessJob(payload)

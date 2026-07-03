@@ -63,9 +63,47 @@ func TestHandleWebhookSignature(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+			req.Header.Set("X-GitHub-Event", "workflow_job")
 			if tt.header != "" {
 				req.Header.Set("X-Hub-Signature-256", tt.header)
 			}
+			rec := httptest.NewRecorder()
+
+			handler(rec, req)
+
+			assert.Equal(t, tt.wantStatus, rec.Code)
+		})
+	}
+}
+
+func TestHandleWebhookEventFilter(t *testing.T) {
+	tests := []struct {
+		name       string
+		event      string
+		body       string
+		wantStatus int
+	}{
+		{"workflow_job is processed", "workflow_job", `{"action":"completed","workflow_job":{"id":1,"run_id":2}}`, http.StatusNoContent},
+		{"workflow_run is processed", "workflow_run", `{"action":"completed","workflow_run":{"id":2}}`, http.StatusNoContent},
+		{"ping is ignored before unmarshalling", "ping", `{"zen":"Design for failure."}`, http.StatusNoContent},
+		{"check_run completed is ignored", "check_run", `{"action":"completed"}`, http.StatusNoContent},
+		{"missing event header is ignored", "", `{"action":"completed"}`, http.StatusNoContent},
+		{"workflow_job with invalid payload is rejected", "workflow_job", `{"action":1}`, http.StatusBadRequest},
+	}
+
+	handler := handleWebhook([]byte("s3cret"))
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Run in a temp dir so the failed-payload path writes files there,
+			// not into the repo.
+			t.Chdir(t.TempDir())
+
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.body))
+			if tt.event != "" {
+				req.Header.Set("X-GitHub-Event", tt.event)
+			}
+			req.Header.Set("X-Hub-Signature-256", sign("s3cret", tt.body))
 			rec := httptest.NewRecorder()
 
 			handler(rec, req)
