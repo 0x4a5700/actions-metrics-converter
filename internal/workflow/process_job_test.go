@@ -8,6 +8,8 @@ import (
 
 	"github.com/0x4a5700/actions-metrics-converter/pkg/github"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -142,6 +144,77 @@ func TestProcessJobIDDerivation(t *testing.T) {
 			assert.Equal(t, spanIDFromInt(tt.jobID), got.JobID)
 		})
 	}
+}
+
+func TestProcessJobAttributes(t *testing.T) {
+	tests := []struct {
+		name     string
+		payload  github.WorkflowJobPayload
+		wantAttr map[string]string
+	}{
+		{
+			name: "populates key attributes",
+			payload: github.WorkflowJobPayload{
+				WorkflowJob: github.WorkflowJob{
+					Conclusion:      "success",
+					Labels:          []string{"self-hosted", "linux"},
+					RunAttempt:      2,
+					RunnerName:      "runner-01",
+					RunnerGroupName: "default",
+					HeadBranch:      "main",
+					HeadSha:         "abc123",
+				},
+				Repository: github.Repository{FullName: "org/repo"},
+			},
+			wantAttr: map[string]string{
+				"ci.job.conclusion":        "success",
+				"ci.job.labels":            "self-hosted,linux",
+				"ci.runner.name":           "runner-01",
+				"ci.runner.group_name":     "default",
+				"vcs.repository.full_name": "org/repo",
+				"vcs.ref.head.name":        "main",
+				"vcs.commit.sha":           "abc123",
+			},
+		},
+		{
+			name: "empty labels produces empty string",
+			payload: github.WorkflowJobPayload{
+				WorkflowJob: github.WorkflowJob{Labels: []string{}},
+			},
+			wantAttr: map[string]string{
+				"ci.job.labels": "",
+			},
+		},
+		{
+			name: "failure conclusion is recorded",
+			payload: github.WorkflowJobPayload{
+				WorkflowJob: github.WorkflowJob{Conclusion: "failure"},
+			},
+			wantAttr: map[string]string{
+				"ci.job.conclusion": "failure",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ProcessJob(tt.payload)
+			for key, want := range tt.wantAttr {
+				val, ok := findAttr(got.Attributes, key)
+				require.True(t, ok, "attribute %q not found", key)
+				assert.Equal(t, want, val.AsString(), "attribute %q", key)
+			}
+		})
+	}
+}
+
+func findAttr(attrs []attribute.KeyValue, key string) (attribute.Value, bool) {
+	for _, kv := range attrs {
+		if string(kv.Key) == key {
+			return kv.Value, true
+		}
+	}
+	return attribute.Value{}, false
 }
 
 func TestTraceIDFromRunID(t *testing.T) {

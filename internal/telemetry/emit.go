@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -16,12 +17,16 @@ func Emit(ctx context.Context, tracer trace.Tracer, s JobSpans) {
 
 	_, queueSpan := tracer.Start(remoteCtx, s.Name+": queue",
 		trace.WithTimestamp(s.QueueStart),
+		trace.WithAttributes(s.Attributes...),
 	)
+	setStatus(queueSpan, s.Conclusion)
 	queueSpan.End(trace.WithTimestamp(s.QueueEnd))
 
 	_, runSpan := tracer.Start(remoteCtx, s.Name+": run",
 		trace.WithTimestamp(s.RunStart),
+		trace.WithAttributes(s.Attributes...),
 	)
+	setStatus(runSpan, s.Conclusion)
 	runSpan.End(trace.WithTimestamp(s.RunEnd))
 }
 
@@ -40,11 +45,24 @@ func EmitRun(ctx context.Context, tracer trace.Tracer, s RunSpans) {
 
 	_, queueSpan := tracer.Start(remoteCtx, s.Name+": queue",
 		trace.WithTimestamp(s.QueueStart),
+		trace.WithAttributes(s.Attributes...),
 	)
+	setStatus(queueSpan, s.Conclusion)
 	queueSpan.End(trace.WithTimestamp(s.QueueEnd))
 
 	_, runSpan := tracer.Start(remoteCtx, s.Name+": run",
 		trace.WithTimestamp(s.RunStart),
+		trace.WithAttributes(s.Attributes...),
 	)
+	setStatus(runSpan, s.Conclusion)
 	runSpan.End(trace.WithTimestamp(s.RunEnd))
+}
+
+func setStatus(span trace.Span, conclusion string) {
+	switch conclusion {
+	case "failure", "cancelled", "timed_out", "action_required":
+		span.SetStatus(codes.Error, conclusion)
+	case "success", "skipped", "neutral":
+		span.SetStatus(codes.Ok, "")
+	}
 }

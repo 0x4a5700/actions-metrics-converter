@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	"go.opentelemetry.io/otel/trace"
@@ -208,6 +210,112 @@ func TestEmitRunSpanTimestamps(t *testing.T) {
 			assert.True(t, tt.span.StartTime.Equal(tt.wantStart), "StartTime: got %v want %v", tt.span.StartTime, tt.wantStart)
 			assert.True(t, tt.span.EndTime.Equal(tt.wantEnd), "EndTime: got %v want %v", tt.span.EndTime, tt.wantEnd)
 		})
+	}
+}
+
+func TestEmitSpanStatus(t *testing.T) {
+	tests := []struct {
+		conclusion string
+		wantCode   codes.Code
+	}{
+		{"success", codes.Ok},
+		{"skipped", codes.Ok},
+		{"neutral", codes.Ok},
+		{"failure", codes.Error},
+		{"cancelled", codes.Error},
+		{"timed_out", codes.Error},
+		{"action_required", codes.Error},
+		{"", codes.Unset},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.conclusion, func(t *testing.T) {
+			exp, tracer := newRecorder()
+			Emit(context.Background(), tracer, JobSpans{
+				TraceID:    trace.TraceID{1},
+				ParentID:   trace.SpanID{1},
+				Name:       "build",
+				Conclusion: tt.conclusion,
+			})
+
+			spans := exp.GetSpans()
+			require.Len(t, spans, 2)
+			for _, span := range spans {
+				assert.Equal(t, tt.wantCode, span.Status.Code, "span %q status", span.Name)
+			}
+		})
+	}
+}
+
+func TestEmitSpanAttributes(t *testing.T) {
+	attrs := []attribute.KeyValue{
+		attribute.String("ci.job.conclusion", "success"),
+		attribute.String("vcs.repository.full_name", "org/repo"),
+	}
+
+	exp, tracer := newRecorder()
+	Emit(context.Background(), tracer, JobSpans{
+		TraceID:    trace.TraceID{1},
+		ParentID:   trace.SpanID{1},
+		Name:       "build",
+		Attributes: attrs,
+	})
+
+	spans := exp.GetSpans()
+	require.Len(t, spans, 2)
+	for _, span := range spans {
+		assert.Subset(t, span.Attributes, attrs, "span %q missing attributes", span.Name)
+	}
+}
+
+func TestEmitRunSpanStatus(t *testing.T) {
+	tests := []struct {
+		conclusion string
+		wantCode   codes.Code
+	}{
+		{"success", codes.Ok},
+		{"failure", codes.Error},
+		{"cancelled", codes.Error},
+		{"", codes.Unset},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.conclusion, func(t *testing.T) {
+			exp, tracer := newRecorder()
+			EmitRun(context.Background(), tracer, RunSpans{
+				TraceID:    trace.TraceID{1},
+				SpanID:     trace.SpanID{1},
+				Name:       "build",
+				Conclusion: tt.conclusion,
+			})
+
+			spans := exp.GetSpans()
+			require.Len(t, spans, 2)
+			for _, span := range spans {
+				assert.Equal(t, tt.wantCode, span.Status.Code, "span %q status", span.Name)
+			}
+		})
+	}
+}
+
+func TestEmitRunSpanAttributes(t *testing.T) {
+	attrs := []attribute.KeyValue{
+		attribute.String("ci.run.conclusion", "failure"),
+		attribute.String("vcs.repository.full_name", "org/repo"),
+	}
+
+	exp, tracer := newRecorder()
+	EmitRun(context.Background(), tracer, RunSpans{
+		TraceID:    trace.TraceID{1},
+		SpanID:     trace.SpanID{1},
+		Name:       "build",
+		Attributes: attrs,
+	})
+
+	spans := exp.GetSpans()
+	require.Len(t, spans, 2)
+	for _, span := range spans {
+		assert.Subset(t, span.Attributes, attrs, "span %q missing attributes", span.Name)
 	}
 }
 

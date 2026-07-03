@@ -4,9 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"strconv"
+	"strings"
 
 	"github.com/0x4a5700/actions-metrics-converter/internal/telemetry"
 	"github.com/0x4a5700/actions-metrics-converter/pkg/github"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -23,6 +25,16 @@ func ProcessJob(payload github.WorkflowJobPayload) telemetry.JobSpans {
 		RunEnd:     job.CompletedAt,
 		Status:     job.Status,
 		Conclusion: job.Conclusion,
+		Attributes: []attribute.KeyValue{
+			attribute.String("ci.job.conclusion", job.Conclusion),
+			attribute.String("ci.job.labels", strings.Join(job.Labels, ",")),
+			attribute.Int("ci.run.attempt", job.RunAttempt),
+			attribute.String("ci.runner.name", job.RunnerName),
+			attribute.String("ci.runner.group_name", job.RunnerGroupName),
+			attribute.String("vcs.repository.full_name", payload.Repository.FullName),
+			attribute.String("vcs.ref.head.name", job.HeadBranch),
+			attribute.String("vcs.commit.sha", job.HeadSha),
+		},
 	}
 }
 

@@ -3,6 +3,7 @@ package telemetry
 import (
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -20,6 +21,7 @@ type JobSpans struct {
 
 	Status     string
 	Conclusion string
+	Attributes []attribute.KeyValue
 }
 
 type RunSpans struct {
@@ -35,4 +37,5 @@ type RunSpans struct {
 
 	Status     string
 	Conclusion string
+	Attributes []attribute.KeyValue
 }

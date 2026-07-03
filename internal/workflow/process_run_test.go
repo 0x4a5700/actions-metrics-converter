@@ -6,6 +6,7 @@ import (
 
 	"github.com/0x4a5700/actions-metrics-converter/pkg/github"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestProcessRun(t *testing.T) {
@@ -129,6 +130,57 @@ func TestProcessRunTraceIDMatchesJobTraceID(t *testing.T) {
 	})
 
 	assert.Equal(t, jobSpans.TraceID, runSpans.TraceID, "job and run spans must share a TraceID for the same run")
+}
+
+func TestProcessRunAttributes(t *testing.T) {
+	tests := []struct {
+		name     string
+		payload  github.WorkflowJobPayload
+		wantAttr map[string]string
+	}{
+		{
+			name: "populates key attributes",
+			payload: github.WorkflowJobPayload{
+				WorkflowRun: github.WorkflowRun{
+					Id:         28280744806,
+					RunNumber:  55,
+					RunAttempt: 3,
+					Conclusion: "success",
+					Event:      "push",
+					HeadBranch: "main",
+					HeadSha:    "abc123",
+				},
+				Repository: github.Repository{FullName: "org/repo"},
+			},
+			wantAttr: map[string]string{
+				"ci.run.conclusion":        "success",
+				"ci.run.event":             "push",
+				"vcs.repository.full_name": "org/repo",
+				"vcs.ref.head.name":        "main",
+				"vcs.commit.sha":           "abc123",
+			},
+		},
+		{
+			name: "failure conclusion is recorded",
+			payload: github.WorkflowJobPayload{
+				WorkflowRun: github.WorkflowRun{Conclusion: "failure"},
+			},
+			wantAttr: map[string]string{
+				"ci.run.conclusion": "failure",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ProcessRun(tt.payload)
+			for key, want := range tt.wantAttr {
+				val, ok := findAttr(got.Attributes, key)
+				require.True(t, ok, "attribute %q not found", key)
+				assert.Equal(t, want, val.AsString(), "attribute %q", key)
+			}
+		})
+	}
 }
 
 func TestProcessRunIDDerivation(t *testing.T) {

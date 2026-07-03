@@ -75,6 +75,12 @@ func handleAny(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if payload.Action != "completed" {
+		slog.Info("ignoring non-completed event", slog.String("action", payload.Action))
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
 	if payload.WorkflowRun.Id != 0 {
 		workflowRun(r.Context(), payload)
 	} else {
