@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -198,7 +199,14 @@ func workflowRun(ctx context.Context, payload github.WorkflowJobPayload) {
 }
 
 func writeRequestToFile(r *http.Request, body string) (string, error) {
-	filename := fmt.Sprintf("%d-%s.txt", time.Now().Unix(), randomString(5))
+	dir := os.Getenv("FAILED_PAYLOAD_DIR")
+	if dir == "" {
+		dir = "."
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	filename := filepath.Join(dir, fmt.Sprintf("%d-%s.txt", time.Now().Unix(), randomString(5)))
 	f, err := os.Create(filename)
 	if err != nil {
 		return "", err

@@ -95,9 +95,8 @@ func TestHandleWebhookEventFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Run in a temp dir so the failed-payload path writes files there,
-			// not into the repo.
-			t.Chdir(t.TempDir())
+			// Send failed-payload files to a temp dir, not into the repo.
+			t.Setenv("FAILED_PAYLOAD_DIR", t.TempDir())
 
 			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.body))
 			if tt.event != "" {

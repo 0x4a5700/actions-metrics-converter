@@ -43,6 +43,8 @@ spec:
                 secretKeyRef:
                   name: {{ include "actions-metrics-converter.webhookSecretName" . }}
                   key: {{ .Values.githubWebhookSecret.key }}
+            - name: FAILED_PAYLOAD_DIR
+              value: {{ .Values.failedPayloadDir | quote }}
             {{- with .Values.otel.exporterOtlpEndpoint }}
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ . | quote }}
@@ -62,6 +64,12 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          volumeMounts:
+            - name: failed-payloads
+              mountPath: {{ .Values.failedPayloadDir | quote }}
+      volumes:
+        - name: failed-payloads
+          emptyDir: {}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

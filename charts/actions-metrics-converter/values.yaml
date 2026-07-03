@@ -24,6 +24,10 @@ otel:
   # Sets OTEL_EXPORTER_OTLP_ENDPOINT, e.g. http://otel-collector.observability:4318
   exporterOtlpEndpoint: ""
 
+# Directory where payloads that fail to unmarshal are saved for inspection.
+# Backed by an emptyDir volume, so contents are lost when the pod is deleted.
+failedPayloadDir: /var/lib/actions-metrics-converter/failed-payloads
+
 # Extra environment variables for the container, e.g. other OTEL_* settings.
 extraEnv: []
 # - name: OTEL_EXPORTER_OTLP_HEADERS
@@ -55,7 +59,7 @@ podSecurityContext:
 
 securityContext:
   allowPrivilegeEscalation: false
-  readOnlyRootFilesystem: false
+  readOnlyRootFilesystem: true
   capabilities:
     drop:
       - ALL
