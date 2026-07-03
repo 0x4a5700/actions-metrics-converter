@@ -33,12 +33,20 @@ const (
 )
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error("exiting", slog.Any("error", err))
+		os.Exit(1)
+	}
+}
+
+// run holds main's logic so its defers (tracer shutdown, flushing spans) run
+// on every exit path before main decides the exit code.
+func run() error {
 	ctx := context.Background()
 
 	shutdown, err := telemetry.InitProvider(ctx, "actions-metrics-converter")
 	if err != nil {
-		slog.Error("failed to initialise tracer provider", slog.Any("error", err))
-		os.Exit(1)
+		return fmt.Errorf("initialise tracer provider: %w", err)
 	}
 	defer func() {
 		if err := shutdown(ctx); err != nil {
@@ -48,8 +56,7 @@ func main() {
 
 	secret := os.Getenv("GITHUB_WEBHOOK_SECRET")
 	if secret == "" {
-		slog.Error("GITHUB_WEBHOOK_SECRET must be set")
-		os.Exit(1)
+		return errors.New("GITHUB_WEBHOOK_SECRET must be set")
 	}
 
 	// GitHub gives webhook deliveries ~10s before marking them failed, so
@@ -62,25 +69,37 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 	http.HandleFunc("/", handleWebhook([]byte(secret)))
+	http.HandleFunc("/healthz", handleHealth)
 
+	errCh := make(chan error, 1)
 	go func() {
 		slog.Info("starting server", slog.Int("port", port))
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("problem listening for connections", slog.Any("error", err))
-			os.Exit(1)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
 		}
 	}()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
+
+	select {
+	case err := <-errCh:
+		return fmt.Errorf("listening for connections: %w", err)
+	case <-quit:
+	}
 
 	slog.Info("shutting down server")
 	shutdownCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		slog.Error("server shutdown error", slog.Any("error", err))
+		return fmt.Errorf("server shutdown: %w", err)
 	}
+	return nil
+}
+
+func handleHealth(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ok\n"))
 }
 
 func handleWebhook(secret []byte) http.HandlerFunc {

@@ -113,6 +113,16 @@ func TestHandleWebhookEventFilter(t *testing.T) {
 	}
 }
 
+func TestHandleHealth(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+
+	handleHealth(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "ok\n", rec.Body.String())
+}
+
 func TestHandleWebhookOversizedBody(t *testing.T) {
 	body := strings.Repeat("a", maxBodyBytes+1)
 
