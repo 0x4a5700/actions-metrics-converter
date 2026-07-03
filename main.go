@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -39,8 +43,14 @@ func main() {
 		}
 	}()
 
+	secret := os.Getenv("GITHUB_WEBHOOK_SECRET")
+	if secret == "" {
+		slog.Error("GITHUB_WEBHOOK_SECRET must be set")
+		os.Exit(1)
+	}
+
 	srv := &http.Server{Addr: fmt.Sprintf(":%d", port)}
-	http.HandleFunc("/", handleAny)
+	http.HandleFunc("/", handleWebhook([]byte(secret)))
 
 	go func() {
 		slog.Info("starting server", slog.Int("port", port))
@@ -62,19 +72,47 @@ func main() {
 	}
 }
 
-func handleAny(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		slog.Error("error reading request body", slog.Any("error", err))
-		http.Error(w, "failed to read body", http.StatusInternalServerError)
-		return
-	}
-	defer func() {
-		if err := r.Body.Close(); err != nil {
-			slog.Error("unable to close http body")
+func handleWebhook(secret []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			slog.Error("error reading request body", slog.Any("error", err))
+			http.Error(w, "failed to read body", http.StatusInternalServerError)
+			return
 		}
-	}()
+		defer func() {
+			if err := r.Body.Close(); err != nil {
+				slog.Error("unable to close http body")
+			}
+		}()
 
+		if !verifySignature(secret, body, r.Header.Get("X-Hub-Signature-256")) {
+			slog.Warn("rejecting request with invalid signature", slog.String("remote_addr", r.RemoteAddr))
+			http.Error(w, "invalid signature", http.StatusUnauthorized)
+			return
+		}
+
+		handlePayload(w, r, body)
+	}
+}
+
+// verifySignature checks the X-Hub-Signature-256 header against an HMAC-SHA256
+// of the raw request body, as sent by GitHub webhooks.
+func verifySignature(secret, body []byte, header string) bool {
+	hexSig, ok := strings.CutPrefix(header, "sha256=")
+	if !ok {
+		return false
+	}
+	sig, err := hex.DecodeString(hexSig)
+	if err != nil {
+		return false
+	}
+	mac := hmac.New(sha256.New, secret)
+	mac.Write(body)
+	return hmac.Equal(mac.Sum(nil), sig)
+}
+
+func handlePayload(w http.ResponseWriter, r *http.Request, body []byte) {
 	decoded, err := url.QueryUnescape(string(body))
 	if err != nil {
 		slog.Warn("error url-decoding body, treating as raw", slog.Any("error", err))
