@@ -74,3 +74,15 @@ func TestHandleWebhookSignature(t *testing.T) {
 		})
 	}
 }
+
+func TestHandleWebhookOversizedBody(t *testing.T) {
+	body := strings.Repeat("a", maxBodyBytes+1)
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("X-Hub-Signature-256", sign("s3cret", body))
+	rec := httptest.NewRecorder()
+
+	handleWebhook([]byte("s3cret"))(rec, req)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+}

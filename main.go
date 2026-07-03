@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -27,6 +28,8 @@ import (
 const (
 	randChars = "abcdefghijklmnopqrstuvwxyz0123456789"
 	port      = 3018
+	// GitHub caps webhook payloads at 25 MB.
+	maxBodyBytes = 25 << 20
 )
 
 func main() {
@@ -74,8 +77,15 @@ func main() {
 
 func handleWebhook(secret []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				slog.Warn("rejecting oversized request body", slog.String("remote_addr", r.RemoteAddr))
+				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+				return
+			}
 			slog.Error("error reading request body", slog.Any("error", err))
 			http.Error(w, "failed to read body", http.StatusInternalServerError)
 			return
