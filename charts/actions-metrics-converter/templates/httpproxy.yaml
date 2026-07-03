@@ -1,0 +1,25 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: {{ include "actions-metrics-converter.fullname" . }}
+  labels:
+    {{- include "actions-metrics-converter.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  virtualhost:
+    fqdn: {{ required "ingress.host is required when ingress.enabled is true" .Values.ingress.host | quote }}
+    {{- with .Values.ingress.tls.secretName }}
+    tls:
+      secretName: {{ . | quote }}
+    {{- end }}
+  routes:
+    - conditions:
+        - prefix: /
+      services:
+        - name: {{ include "actions-metrics-converter.fullname" . }}
+          port: {{ .Values.service.port }}
+{{- end }}

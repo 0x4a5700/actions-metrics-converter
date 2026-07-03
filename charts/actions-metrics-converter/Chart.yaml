@@ -1,0 +1,6 @@
+apiVersion: v2
+name: actions-metrics-converter
+description: Converts GitHub Actions workflow webhook events into OpenTelemetry traces
+type: application
+version: 0.1.0
+appVersion: "latest"
