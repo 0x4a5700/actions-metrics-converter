@@ -8,7 +8,11 @@ import (
 )
 
 func TestUnmarshalAllPayloads(t *testing.T) {
-	files, err := filepath.Glob(".testdata/wf_*.json")
+	path := "testdata/wf_*.json"
+	files, err := filepath.Glob(path)
+	if len(files) < 1 {
+		t.Fatalf("no files found matching %s", path)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
