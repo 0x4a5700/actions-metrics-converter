@@ -73,11 +73,11 @@ resources: {}
 
 livenessProbe:
   httpGet:
-    path: /healthz
+    path: /health
     port: http
 readinessProbe:
   httpGet:
-    path: /healthz
+    path: /health
     port: http
 
 nodeSelector: {}
