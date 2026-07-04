@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"crypto/hmac"
+	crand "crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -10,7 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math/rand"
+	"math/big"
 	"net/http"
 	"net/url"
 	"os"
@@ -129,11 +130,11 @@ func writeRequestToFile(r *http.Request, body string) (string, error) {
 	if dir == "" {
 		dir = "."
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return "", err
 	}
 	filename := filepath.Join(dir, fmt.Sprintf("%d-%s.txt", time.Now().Unix(), randomString(5)))
-	f, err := os.Create(filename)
+	f, err := os.Create(filename) // #nosec G304 -- path is env-configured and cleaned by filepath.Join
 	if err != nil {
 		return "", err
 	}
@@ -157,7 +158,8 @@ func writeRequestToFile(r *http.Request, body string) (string, error) {
 func randomString(n int) string {
 	b := make([]byte, n)
 	for i := range b {
-		b[i] = randChars[rand.Intn(len(randChars))]
+		idx, _ := crand.Int(crand.Reader, big.NewInt(int64(len(randChars))))
+		b[i] = randChars[idx.Int64()]
 	}
 	return string(b)
 }

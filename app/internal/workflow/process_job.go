@@ -47,6 +47,6 @@ func traceIDFromRunID(runID int) trace.TraceID {
 
 func spanIDFromInt(id int) trace.SpanID {
 	var b [8]byte
-	binary.BigEndian.PutUint64(b[:], uint64(id))
+	binary.BigEndian.PutUint64(b[:], uint64(id)) // #nosec G115 -- GitHub IDs are always positive
 	return trace.SpanID(b)
 }
