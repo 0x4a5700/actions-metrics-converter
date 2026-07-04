@@ -1,6 +1,6 @@
 FROM golang:alpine3.23 AS builder
 WORKDIR /app
-COPY app/* .
+COPY app/ .
 
 ARG gitHash=undefined
 ARG buildVersion=undefined
