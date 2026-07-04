@@ -1,4 +1,4 @@
-package main
+package handlers
 
 import (
 	"crypto/hmac"
@@ -43,7 +43,7 @@ func TestVerifySignature(t *testing.T) {
 	}
 }
 
-func TestHandleWebhookSignature(t *testing.T) {
+func TestWebhookSignature(t *testing.T) {
 	// A non-completed action so accepted requests stop at the event filter
 	// without emitting spans or writing files.
 	body := `{"action":"queued"}`
@@ -58,7 +58,7 @@ func TestHandleWebhookSignature(t *testing.T) {
 		{"missing signature is rejected", "", http.StatusUnauthorized},
 	}
 
-	handler := handleWebhook([]byte("s3cret"))
+	handler := Webhook([]byte("s3cret"))
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -76,7 +76,7 @@ func TestHandleWebhookSignature(t *testing.T) {
 	}
 }
 
-func TestHandleWebhookEventFilter(t *testing.T) {
+func TestWebhookEventFilter(t *testing.T) {
 	tests := []struct {
 		name       string
 		event      string
@@ -91,7 +91,7 @@ func TestHandleWebhookEventFilter(t *testing.T) {
 		{"workflow_job with invalid payload is rejected", "workflow_job", `{"action":1}`, http.StatusBadRequest},
 	}
 
-	handler := handleWebhook([]byte("s3cret"))
+	handler := Webhook([]byte("s3cret"))
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -112,24 +112,14 @@ func TestHandleWebhookEventFilter(t *testing.T) {
 	}
 }
 
-func TestHandleHealth(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	rec := httptest.NewRecorder()
-
-	handleHealth(rec, req)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.Equal(t, "ok\n", rec.Body.String())
-}
-
-func TestHandleWebhookOversizedBody(t *testing.T) {
+func TestWebhookOversizedBody(t *testing.T) {
 	body := strings.Repeat("a", maxBodyBytes+1)
 
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 	req.Header.Set("X-Hub-Signature-256", sign("s3cret", body))
 	rec := httptest.NewRecorder()
 
-	handleWebhook([]byte("s3cret"))(rec, req)
+	Webhook([]byte("s3cret"))(rec, req)
 
 	assert.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
 }

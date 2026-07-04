@@ -1,4 +1,4 @@
-package main
+package handlers
 
 import (
 	"context"
@@ -14,96 +14,22 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"time"
 
-	"github.com/0x4a5700/actions-metrics-converter/internal/telemetry"
-	"github.com/0x4a5700/actions-metrics-converter/internal/workflow"
-	github "github.com/0x4a5700/actions-metrics-converter/pkg/github"
+	telemetry2 "github.com/0x4a5700/actions-metrics-converter/internal/telemetry"
+	workflow2 "github.com/0x4a5700/actions-metrics-converter/internal/workflow"
+	"github.com/0x4a5700/actions-metrics-converter/pkg/github"
 	"go.opentelemetry.io/otel"
 )
 
 const (
-	randChars = "abcdefghijklmnopqrstuvwxyz0123456789"
-	port      = 3018
-	// GitHub caps webhook payloads at 25 MB.
 	maxBodyBytes = 25 << 20
+	randChars    = "abcdefghijklmnopqrstuvwxyz0123456789"
 )
 
-func main() {
-	if err := run(); err != nil {
-		slog.Error("exiting", slog.Any("error", err))
-		os.Exit(1)
-	}
-}
-
-// run holds main's logic so its defers (tracer shutdown, flushing spans) run
-// on every exit path before main decides the exit code.
-func run() error {
-	ctx := context.Background()
-
-	shutdown, err := telemetry.InitProvider(ctx, "actions-metrics-converter")
-	if err != nil {
-		return fmt.Errorf("initialise tracer provider: %w", err)
-	}
-	defer func() {
-		if err := shutdown(ctx); err != nil {
-			slog.Error("error shutting down tracer provider", slog.Any("error", err))
-		}
-	}()
-
-	secret := os.Getenv("GITHUB_WEBHOOK_SECRET")
-	if secret == "" {
-		return errors.New("GITHUB_WEBHOOK_SECRET must be set")
-	}
-
-	// GitHub gives webhook deliveries ~10s before marking them failed, so
-	// there is no value in letting requests linger much longer than that.
-	srv := &http.Server{
-		Addr:              fmt.Sprintf(":%d", port),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
-	http.HandleFunc("/", handleWebhook([]byte(secret)))
-	http.HandleFunc("/healthz", handleHealth)
-
-	errCh := make(chan error, 1)
-	go func() {
-		slog.Info("starting server", slog.Int("port", port))
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
-		}
-	}()
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-
-	select {
-	case err := <-errCh:
-		return fmt.Errorf("listening for connections: %w", err)
-	case <-quit:
-	}
-
-	slog.Info("shutting down server")
-	shutdownCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("server shutdown: %w", err)
-	}
-	return nil
-}
-
-func handleHealth(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte("ok\n"))
-}
-
-func handleWebhook(secret []byte) http.HandlerFunc {
+func Webhook(secret []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 		body, err := io.ReadAll(r.Body)
@@ -185,8 +111,8 @@ func handlePayload(w http.ResponseWriter, r *http.Request, body []byte) {
 	if event == "workflow_run" {
 		workflowRun(r.Context(), payload)
 	} else {
-		spans := workflow.ProcessJob(payload)
-		telemetry.Emit(r.Context(), otel.Tracer("actions-metrics-converter"), spans)
+		spans := workflow2.ProcessJob(payload)
+		telemetry2.Emit(r.Context(), otel.Tracer("actions-metrics-converter"), spans)
 	}
 
 	slog.Info("request complete", slog.Any("url", r.URL.String()))
@@ -194,8 +120,8 @@ func handlePayload(w http.ResponseWriter, r *http.Request, body []byte) {
 }
 
 func workflowRun(ctx context.Context, payload github.WorkflowJobPayload) {
-	spans := workflow.ProcessRun(payload)
-	telemetry.EmitRun(ctx, otel.Tracer("actions-metrics-converter"), spans)
+	spans := workflow2.ProcessRun(payload)
+	telemetry2.EmitRun(ctx, otel.Tracer("actions-metrics-converter"), spans)
 }
 
 func writeRequestToFile(r *http.Request, body string) (string, error) {
