@@ -165,4 +165,20 @@ The ingress template renders a Contour `HTTPProxy`. If your cluster uses a diffe
 
 ## CI
 
-The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `main` and on pull requests. It checks formatting with `gofmt`, runs `go vet`, and runs the test suite. There is no automated image build or chart publish step in CI — those are currently manual.
+The GitHub Actions workflow (`.github/workflows/ci.yml`) runs on every push to `main` and on pull requests. It checks formatting with `gofmt`, runs `go vet`, runs the test suite, builds the Docker image, and lints/packages the Helm chart. On pushes to `main` the image and chart are published to GHCR.
+
+## Versioning and releases
+
+Versioning is fully automated by [semantic-release](https://semantic-release.gitbook.io/) (configured in `.releaserc.json`) — do not bump versions by hand. On every push to `main`, the release job analyses commit messages, and if a release is warranted it creates a git tag and a GitHub release, then:
+
+- the Docker image is additionally tagged with the new version (alongside `latest` and `sha-*`),
+- the Helm chart is packaged with `version` and `appVersion` set to the same number and pushed to GHCR. The values in `Chart.yaml` are placeholders overridden at package time.
+
+Commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+- `fix:` → patch release
+- `feat:` → minor release
+- `feat!:` / `fix!:` or a `BREAKING CHANGE:` footer → major release
+- `ci:`, `docs:`, `chore:`, `refactor:`, `test:`, `build:` → no release
+
+Commits that don't trigger a release still publish `latest` and `sha-*` image tags, but the chart is only pushed when a new version is released.

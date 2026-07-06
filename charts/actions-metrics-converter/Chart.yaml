@@ -2,5 +2,7 @@ apiVersion: v2
 name: actions-metrics-converter
 description: Converts GitHub Actions workflow webhook events into OpenTelemetry traces
 type: application
-version: 0.1.1
-appVersion: "latest"
+# version and appVersion are placeholders; CI overrides both with the
+# semantic-release version at package time (helm package --version --app-version).
+version: 0.0.0
+appVersion: "0.0.0"
