@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -102,6 +103,52 @@ func TestWebhookEventFilter(t *testing.T) {
 			if tt.event != "" {
 				req.Header.Set("X-GitHub-Event", tt.event)
 			}
+			req.Header.Set("X-Hub-Signature-256", sign("s3cret", tt.body))
+			rec := httptest.NewRecorder()
+
+			handler(rec, req)
+
+			assert.Equal(t, tt.wantStatus, rec.Code)
+		})
+	}
+}
+
+func TestWebhookFormEncodedPayload(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType string
+		body        string
+		wantStatus  int
+	}{
+		{
+			"form-encoded payload field is unwrapped",
+			"application/x-www-form-urlencoded",
+			"payload=" + url.QueryEscape(`{"action":"completed","workflow_job":{"id":1,"run_id":2}}`),
+			http.StatusNoContent,
+		},
+		{
+			"json body with reserved characters is not mangled",
+			"application/json",
+			`{"action":"completed","workflow_job":{"id":1,"run_id":2,"name":"build+test 100%"}}`,
+			http.StatusNoContent,
+		},
+		{
+			"form-encoded body without payload field is rejected",
+			"application/x-www-form-urlencoded",
+			"other=" + url.QueryEscape(`{"action":"completed"}`),
+			http.StatusBadRequest,
+		},
+	}
+
+	handler := Webhook([]byte("s3cret"))
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("FAILED_PAYLOAD_DIR", t.TempDir())
+
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(tt.body))
+			req.Header.Set("X-GitHub-Event", "workflow_job")
+			req.Header.Set("Content-Type", tt.contentType)
 			req.Header.Set("X-Hub-Signature-256", sign("s3cret", tt.body))
 			rec := httptest.NewRecorder()
 

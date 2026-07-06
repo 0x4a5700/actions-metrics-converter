@@ -59,10 +59,42 @@ ingress:
   enabled: true
   host: actions-metrics.example.com
   tls:
-    secretName: actions-metrics-tls  # cert-manager Certificate secretName, or leave empty for HTTP
+    secretName: actions-metrics-tls  # name of a Secret holding the cert, or leave empty for HTTP
 ```
 
 Configure the GitHub webhook to send `workflow_job` and `workflow_run` events to `https://actions-metrics.example.com/`.
+
+### TLS with cert-manager
+
+The chart exposes the service through a Contour `HTTPProxy`, **not** a standard Kubernetes `Ingress`. Because there is no `Ingress` object, cert-manager's ingress-shim (the `cert-manager.io/cluster-issuer` annotation that auto-provisions certs) does **not** apply here. You must create a cert-manager `Certificate` yourself and point the chart at the Secret it produces.
+
+Apply a `Certificate` in the same namespace as the release:
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: actions-metrics-tls
+spec:
+  secretName: actions-metrics-tls        # cert-manager writes the cert here
+  issuerRef:
+    name: letsencrypt-prod               # your ClusterIssuer / Issuer
+    kind: ClusterIssuer
+  dnsNames:
+    - actions-metrics.example.com
+```
+
+Then reference that Secret from your values:
+
+```yaml
+ingress:
+  enabled: true
+  host: actions-metrics.example.com
+  tls:
+    secretName: actions-metrics-tls      # matches Certificate.spec.secretName
+```
+
+cert-manager generates and renews the certificate into the `actions-metrics-tls` Secret, and the `HTTPProxy` serves it. The same pattern works for any other source of a TLS Secret (manually created, External Secrets, corporate PKI) — just set `tls.secretName` to the Secret's name.
 
 ### Webhook secret
 

@@ -85,10 +85,16 @@ func handlePayload(w http.ResponseWriter, r *http.Request, body []byte) {
 		return
 	}
 
-	decoded, err := url.QueryUnescape(string(body))
-	if err != nil {
-		slog.Warn("error url-decoding body, treating as raw", slog.Any("error", err))
-		decoded = string(body)
+	// Webhooks configured with content type application/x-www-form-urlencoded
+	// deliver the JSON document as a form field: payload=<url-encoded-json>.
+	decoded := string(body)
+	if ct := r.Header.Get("Content-Type"); strings.HasPrefix(ct, "application/x-www-form-urlencoded") {
+		form, err := url.ParseQuery(decoded)
+		if err != nil {
+			slog.Warn("error parsing form-encoded body, treating as raw", slog.Any("error", err))
+		} else {
+			decoded = form.Get("payload")
+		}
 	}
 
 	var payload github.WorkflowJobPayload
