@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	telemetry2 "github.com/0x4a5700/actions-metrics-converter/internal/telemetry"
-	workflow2 "github.com/0x4a5700/actions-metrics-converter/internal/workflow"
+	"github.com/0x4a5700/actions-metrics-converter/internal/telemetry"
+	"github.com/0x4a5700/actions-metrics-converter/internal/workflow"
 	"github.com/0x4a5700/actions-metrics-converter/pkg/github"
 	"go.opentelemetry.io/otel"
 )
@@ -118,8 +118,8 @@ func handlePayload(w http.ResponseWriter, r *http.Request, body []byte) {
 	if event == "workflow_run" {
 		workflowRun(r.Context(), payload)
 	} else {
-		spans := workflow2.ProcessJob(payload)
-		telemetry2.Emit(r.Context(), otel.Tracer("actions-metrics-converter"), spans)
+		spans := workflow.ProcessJob(payload)
+		telemetry.Emit(r.Context(), otel.Tracer("actions-metrics-converter"), spans)
 	}
 
 	slog.Info("request complete", slog.Any("url", r.URL.String()))
@@ -127,8 +127,8 @@ func handlePayload(w http.ResponseWriter, r *http.Request, body []byte) {
 }
 
 func workflowRun(ctx context.Context, payload github.WorkflowJobPayload) {
-	spans := workflow2.ProcessRun(payload)
-	telemetry2.EmitRun(ctx, otel.Tracer("actions-metrics-converter"), spans)
+	spans := workflow.ProcessRun(payload)
+	telemetry.EmitRun(ctx, otel.Tracer("actions-metrics-converter"), spans)
 }
 
 func writeRequestToFile(r *http.Request, body string) (string, error) {
