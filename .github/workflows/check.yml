@@ -1,0 +1,39 @@
+---
+name: Run tests
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: app/go.mod
+          cache-dependency-path: app/go.sum
+      - name: Check formatting
+        run: |
+          files=$(gofmt -l -s ./app)
+          if [ -n "$files" ]; then
+            echo "The following files need formatting:"
+            echo "$files"
+            echo "Run: gofmt -w -s ./app"
+            exit 1
+          fi
+      - name: Gosec
+        uses: securego/gosec@master
+        with:
+          args: app/...
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12
+          working-directory: app
+      - name: Test
+        run: cd app && go test ./...
