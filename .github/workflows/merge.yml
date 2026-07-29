@@ -38,7 +38,7 @@ jobs:
       - test
       - release
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - uses: actions/checkout@v7
@@ -104,7 +104,7 @@ jobs:
       - release
       - docker
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - uses: actions/checkout@v7
