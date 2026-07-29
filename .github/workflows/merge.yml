@@ -67,6 +67,7 @@ jobs:
             type=raw,value=${{ needs.release.outputs.version }},enable=${{ needs.release.outputs.published == 'true' }}
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -83,19 +84,19 @@ jobs:
             gitHash=${{ github.sha }}
             buildVersion=${{ needs.release.outputs.published == 'true' && needs.release.outputs.version || github.sha }}
       - name: Add Docker pull to release
+        if: needs.release.outputs.published == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.release.outputs.version }}
         run: |
           gh release edit "v${VERSION}" --notes-file - <<EOF
           $(gh release view "v${VERSION}" --json body -q .body)
-      
+
           ## Container image
           \`\`\`
           docker pull ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}
           \`\`\`
           EOF
-        
 
   helm:
     runs-on: ubuntu-latest
@@ -138,4 +139,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.release.outputs.version }}
-        run: gh release upload "v${VERSION}" /tmp/helm-packages/actions-metrics-converter-${VERSION}.tgz --clobber
+        # Rename so the release asset is distinguishable from other artifacts
+        run: |
+          cp /tmp/helm-packages/actions-metrics-converter-${VERSION}.tgz \
+            /tmp/helm-packages/actions-metrics-converter-helm-${VERSION}.tgz
+          gh release upload "v${VERSION}" /tmp/helm-packages/actions-metrics-converter-helm-${VERSION}.tgz --clobber
