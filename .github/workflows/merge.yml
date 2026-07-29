@@ -82,6 +82,18 @@ jobs:
           build-args: |
             gitHash=${{ github.sha }}
             buildVersion=${{ needs.release.outputs.published == 'true' && needs.release.outputs.version || github.sha }}
+      - name: Add Docker pull to release
+        run: |
+          gh release edit "v${VERSION}" --notes-file - <<EOF
+          $(gh release view "v${VERSION}" --json body -q .body)
+      
+          ## Container image
+          \`\`\`
+          docker pull ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}
+          \`\`\`
+          EOF
+  env:
+    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   helm:
     runs-on: ubuntu-latest
@@ -118,3 +130,10 @@ jobs:
         # root would land the chart in the same repo as the docker image and
         # overwrite its version tag.
         run: helm push /tmp/helm-packages/*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+
+      - name: Add chart to release
+        if: needs.release.outputs.published == 'true'
+        run: gh release upload "v${VERSION}" /tmp/helm-packages/actions-metrics-converter-${VERSION}.tgz --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.semantic.outputs.version }}
