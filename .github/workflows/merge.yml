@@ -83,6 +83,8 @@ jobs:
             gitHash=${{ github.sha }}
             buildVersion=${{ needs.release.outputs.published == 'true' && needs.release.outputs.version || github.sha }}
       - name: Add Docker pull to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release edit "v${VERSION}" --notes-file - <<EOF
           $(gh release view "v${VERSION}" --json body -q .body)
@@ -92,8 +94,7 @@ jobs:
           docker pull ghcr.io/${{ github.repository }}@${{ steps.build.outputs.digest }}
           \`\`\`
           EOF
-  env:
-    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
 
   helm:
     runs-on: ubuntu-latest
