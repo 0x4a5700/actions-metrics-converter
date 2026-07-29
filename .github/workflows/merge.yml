@@ -84,7 +84,8 @@ jobs:
             buildVersion=${{ needs.release.outputs.published == 'true' && needs.release.outputs.version || github.sha }}
       - name: Add Docker pull to release
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
         run: |
           gh release edit "v${VERSION}" --notes-file - <<EOF
           $(gh release view "v${VERSION}" --json body -q .body)
@@ -134,7 +135,7 @@ jobs:
 
       - name: Add chart to release
         if: needs.release.outputs.published == 'true'
-        run: gh release upload "v${VERSION}" /tmp/helm-packages/actions-metrics-converter-${VERSION}.tgz --clobber
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.semantic.outputs.version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: gh release upload "v${VERSION}" /tmp/helm-packages/actions-metrics-converter-${VERSION}.tgz --clobber
