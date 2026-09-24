@@ -27,13 +27,13 @@ jobs:
             exit 1
           fi
       - name: Gosec
-        uses: securego/gosec@master
-        with:
-          args: app/...
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec app/...
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.12
+          version: v2.14
           working-directory: app
       - name: Test
         run: cd app && go test ./...
