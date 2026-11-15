@@ -15,10 +15,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/0x4a5700/actions-metrics-converter/internal/apperr"
 	"github.com/0x4a5700/actions-metrics-converter/internal/telemetry"
 	"github.com/0x4a5700/actions-metrics-converter/internal/workflow"
 	"github.com/0x4a5700/actions-metrics-converter/pkg/github"
@@ -132,15 +132,17 @@ func workflowRun(ctx context.Context, payload github.WorkflowJobPayload) {
 }
 
 func writeRequestToFile(r *http.Request, body string) (string, error) {
-	dir := os.Getenv("FAILED_PAYLOAD_DIR")
-	if dir == "" {
-		dir = "."
+	fd := os.Getenv("FAILED_PAYLOAD_DIR")
+	if fd == "" {
+		return "", apperr.MissingEnvVar{VarName: "FAILED_PAYLOAD_DIR", Fatal: true}
 	}
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return "", err
+	dir, err := os.OpenRoot(fd)
+	if err != nil {
+		return "", fmt.Errorf("unable to open directory: %w", err)
 	}
-	filename := filepath.Join(dir, fmt.Sprintf("%d-%s.txt", time.Now().Unix(), randomString(5)))
-	f, err := os.Create(filename) // #nosec G304 -- path is env-configured and cleaned by filepath.Join
+
+	filename := fmt.Sprintf("%d-%s.txt", time.Now().Unix(), randomString(5))
+	f, err := dir.Create(filename)
 	if err != nil {
 		return "", err
 	}
